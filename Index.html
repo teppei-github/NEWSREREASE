@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, "Hiragino Sans", Meiryo, sans-serif;
+         max-width: 860px; margin: 0 auto; padding: 24px 18px 80px; line-height: 1.6; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.lead { color: #666; margin-top: 0; }
+  fieldset { border: 1px solid #ccc; border-radius: 8px; margin: 18px 0; padding: 14px 16px; }
+  legend { font-weight: bold; padding: 0 6px; }
+  label { display: block; font-size: 13px; font-weight: bold; margin: 10px 0 3px; }
+  input[type=text], input[type=url], textarea {
+    width: 100%; box-sizing: border-box; padding: 8px; font-size: 14px;
+    border: 1px solid #bbb; border-radius: 6px; font-family: inherit; }
+  textarea { resize: vertical; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1 1 240px; }
+  button { font-size: 15px; padding: 10px 20px; border-radius: 6px; border: 0;
+           background: #1a73e8; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.secondary { background: #5f6368; }
+  .hint { font-size: 12px; color: #888; font-weight: normal; }
+  .status { margin: 12px 0; padding: 10px 12px; border-radius: 6px; background: #f1f3f4; font-size: 14px; }
+  .status.err { background: #fce8e6; color: #c5221f; }
+  .status.ok { background: #e6f4ea; color: #137333; }
+  #missing { color: #c5221f; font-size: 13px; white-space: pre-wrap; }
+  .hidden { display: none; }
+  a.docbtn { display: inline-block; margin-top: 10px; padding: 10px 18px; background: #137333;
+             color: #fff; border-radius: 6px; text-decoration: none; }
+  details { margin-top: 8px; } details summary { cursor: pointer; font-size: 13px; color: #666; }
+  pre { white-space: pre-wrap; background: #f6f6f6; padding: 10px; border-radius: 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>セミナーリリース下書きジェネレーター</h1>
+<p class="lead">手順2（内容の整理）と手順3（リリース文の下書き）を自動化します。生成された下書きはGoogleドキュメントに保存されます。</p>
+
+<fieldset>
+  <legend>STEP 1 — LPを読み込む</legend>
+  <label>セミナーLPのURL</label>
+  <input type="url" id="lpUrl" placeholder="https://go.crie.co.jp/...">
+  <div style="margin-top:10px">
+    <button id="btnAnalyze" onclick="runAnalyze()">LPを分析して整理する</button>
+  </div>
+  <details>
+    <summary>URLで取得できない場合：本文を貼り付ける</summary>
+    <label>LP本文（テキスト）</label>
+    <textarea id="lpText" rows="6" placeholder="LPの本文をコピーして貼り付け"></textarea>
+    <button class="secondary" style="margin-top:8px" onclick="runAnalyzeText()">貼り付けた本文で整理する</button>
+  </details>
+</fieldset>
+
+<div id="status" class="status hidden"></div>
+
+<form id="step2" class="hidden">
+<fieldset>
+  <legend>STEP 2 — 整理結果を確認・修正</legend>
+  <p class="hint">AIが抽出した内容です。誤りを直してから下書きを生成してください。</p>
+
+  <label>テーマ</label>
+  <input type="text" id="f_theme">
+
+  <label>内容の要約</label>
+  <textarea id="f_summary" rows="3"></textarea>
+
+  <div class="row">
+    <div><label>開催日時</label><input type="text" id="f_dateTime"></div>
+    <div><label>形式 <span class="hint">オンライン/オフライン/ハイブリッド</span></label><input type="text" id="f_format"></div>
+  </div>
+  <div class="row">
+    <div><label>会場</label><input type="text" id="f_location"></div>
+    <div><label>参加費</label><input type="text" id="f_fee"></div>
+  </div>
+  <div class="row">
+    <div><label>定員</label><input type="text" id="f_capacity"></div>
+    <div><label>申込締切</label><input type="text" id="f_deadline"></div>
+  </div>
+  <label>申込先URL</label>
+  <input type="text" id="f_applicationUrl">
+
+  <label>ターゲット層 <span class="hint">1行に1つ</span></label>
+  <textarea id="f_targetAudience" rows="3"></textarea>
+
+  <label>こんなことが学べます <span class="hint">1行に1つ</span></label>
+  <textarea id="f_learnings" rows="4"></textarea>
+
+  <label>登壇者 <span class="hint">1行に1人／「氏名 | 肩書」</span></label>
+  <textarea id="f_speakers" rows="2"></textarea>
+
+  <label>キーワード <span class="hint">1行に1つ</span></label>
+  <textarea id="f_keywords" rows="2"></textarea>
+
+  <label>要確認項目（AIが埋められなかった箇所）</label>
+  <div id="missing"></div>
+
+  <div style="margin-top:16px">
+    <button id="btnDraft" onclick="runDraft(event)">リリース文の下書きを生成する</button>
+  </div>
+</fieldset>
+</form>
+
+<div id="result" class="hidden">
+<fieldset>
+  <legend>STEP 3 — 下書き完成</legend>
+  <a class="docbtn" id="docLink" href="#" target="_blank">Googleドキュメントを開く</a>
+  <details open><summary>本文プレビュー</summary><pre id="mdPreview"></pre></details>
+</fieldset>
+</div>
+
+<script>
+function setStatus(msg, cls) {
+  var el = document.getElementById('status');
+  el.className = 'status' + (cls ? ' ' + cls : '');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function lines(v){ return (v||'').split('\n').map(function(s){return s.trim();}).filter(Boolean); }
+function fill(id, v){ document.getElementById(id).value = v == null ? '' : v; }
+
+function runAnalyze() {
+  var url = document.getElementById('lpUrl').value.trim();
+  if (!url) { setStatus('URLを入力してください。', 'err'); return; }
+  lock(true);
+  setStatus('LPを取得して分析しています…（30秒ほどかかることがあります）');
+  google.script.run.withSuccessHandler(onAnalyzed).withFailureHandler(onErr).apiAnalyze(url);
+}
+function runAnalyzeText() {
+  var t = document.getElementById('lpText').value.trim();
+  if (!t) { setStatus('本文を貼り付けてください。', 'err'); return; }
+  lock(true);
+  setStatus('本文を分析しています…');
+  google.script.run.withSuccessHandler(onAnalyzed).withFailureHandler(onErr)
+    .apiAnalyzeText(t, document.getElementById('lpUrl').value.trim());
+}
+
+function onAnalyzed(res) {
+  lock(false);
+  var a = res.analysis || {};
+  var o = a.overview || {};
+  fill('f_theme', a.theme); fill('f_summary', a.summary);
+  fill('f_dateTime', o.dateTime); fill('f_format', o.format); fill('f_location', o.location);
+  fill('f_fee', o.fee); fill('f_capacity', o.capacity); fill('f_deadline', o.deadline);
+  fill('f_applicationUrl', o.applicationUrl);
+  fill('f_targetAudience', (a.targetAudience||[]).join('\n'));
+  fill('f_learnings', (a.learnings||[]).join('\n'));
+  fill('f_speakers', (a.speakers||[]).map(function(s){return [s.name, s.title].filter(Boolean).join(' | ');}).join('\n'));
+  fill('f_keywords', (a.keywords||[]).join('\n'));
+  document.getElementById('missing').textContent =
+    (a.missingInfo && a.missingInfo.length) ? '・' + a.missingInfo.join('\n・') : '（なし）';
+  document.getElementById('step2').classList.remove('hidden');
+  setStatus(res.lpTitle ? '分析完了：' + res.lpTitle : '分析完了。内容を確認してください。', 'ok');
+  document.getElementById('step2').scrollIntoView({behavior:'smooth'});
+}
+
+function collectAnalysis() {
+  return {
+    theme: document.getElementById('f_theme').value.trim(),
+    summary: document.getElementById('f_summary').value.trim(),
+    overview: {
+      dateTime: document.getElementById('f_dateTime').value.trim(),
+      format: document.getElementById('f_format').value.trim(),
+      location: document.getElementById('f_location').value.trim(),
+      fee: document.getElementById('f_fee').value.trim(),
+      capacity: document.getElementById('f_capacity').value.trim(),
+      deadline: document.getElementById('f_deadline').value.trim(),
+      applicationUrl: document.getElementById('f_applicationUrl').value.trim()
+    },
+    targetAudience: lines(document.getElementById('f_targetAudience').value),
+    learnings: lines(document.getElementById('f_learnings').value),
+    speakers: lines(document.getElementById('f_speakers').value).map(function(l){
+      var parts = l.split('|'); return { name: (parts[0]||'').trim(), title: (parts[1]||'').trim() };
+    }),
+    keywords: lines(document.getElementById('f_keywords').value)
+  };
+}
+
+function runDraft(e) {
+  if (e) e.preventDefault();
+  lock(true);
+  setStatus('リリース文の下書きを生成しています…（1分ほどかかることがあります）');
+  google.script.run.withSuccessHandler(onDraft).withFailureHandler(onErr).apiGenerateDraft(collectAnalysis());
+}
+function onDraft(res) {
+  lock(false);
+  setStatus('下書きを作成しました。', 'ok');
+  document.getElementById('docLink').href = res.docUrl;
+  document.getElementById('mdPreview').textContent = res.markdown;
+  document.getElementById('result').classList.remove('hidden');
+  document.getElementById('result').scrollIntoView({behavior:'smooth'});
+}
+
+function onErr(err) { lock(false); setStatus('エラー: ' + (err && err.message ? err.message : err), 'err'); }
+function lock(b) {
+  ['btnAnalyze','btnDraft'].forEach(function(id){ var el=document.getElementById(id); if(el) el.disabled=b; });
+}
+</script>
+</body>
+</html>
